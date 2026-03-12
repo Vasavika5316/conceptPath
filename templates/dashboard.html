@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - ConceptPath</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top right, #e0e7ff, #f8fafc 35%, #f8fafc 100%);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+
+        .glass {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.86);
+        }
+
+        .dark {
+            background: #0f172a;
+            color: white;
+        }
+    </style>
+</head>
+
+<body class="h-screen flex flex-col overflow-hidden text-slate-800">
+
+    <nav class="glass border-b border-indigo-100 px-8 py-4 flex justify-between items-center shadow-sm z-10">
+        <div class="flex items-center gap-3">
+            <div
+                class="w-10 h-10 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-extrabold tracking-tight">Concept<span class="text-indigo-600">Path</span></h1>
+        </div>
+        <div class="flex items-center gap-6">
+            <button onclick="openRoadmapsModal()"
+                class="text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-colors">My
+                Roadmaps</button>
+            <button onclick="toggleDarkMode()"
+                class="text-sm font-semibold text-slate-500 hover:text-indigo-600 transition-colors">🌙</button>
+            <span class="text-slate-600 font-medium bg-slate-100 px-4 py-2 rounded-full">Hello, <span
+                    class="text-indigo-600 font-bold">{{ username }}</span></span>
+            <a href="{{ url_for('logout') }}"
+                class="text-sm font-semibold text-slate-500 hover:text-red-500 transition-colors">Logout</a>
+        </div>
+    </nav>
+
+    <main class="flex-1 max-w-[1800px] w-full mx-auto p-6 flex flex-col gap-5 overflow-hidden">
+
+        <section class="glass border border-indigo-100 rounded-2xl p-5 shadow-sm shrink-0 relative overflow-hidden">
+            <div
+                class="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-indigo-100 blur-3xl opacity-70 pointer-events-none">
+            </div>
+            <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 items-end relative z-10">
+                <div class="xl:col-span-8">
+                    <label class="text-xs uppercase tracking-wider font-bold text-indigo-600">Target Concept or
+                        Educational Text</label>
+                    <textarea id="searchInput" rows="3"
+                        placeholder="Enter a concept like 'Neural Networks' or paste educational content..."
+                        class="w-full mt-2 rounded-xl border-2 border-indigo-100 bg-white/90 px-4 py-3 text-slate-700 focus:ring-4 focus:ring-indigo-200 focus:border-indigo-400 outline-none resize-none"></textarea>
+                </div>
+                <div class="xl:col-span-4 flex flex-wrap gap-2 xl:justify-end">
+                    <label
+                        class="flex items-center gap-2 bg-white border border-indigo-100 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600">
+                        Nodes/level
+                        <input id="nodeLimitInput" type="number" min="4" max="40" value="14"
+                            class="w-16 rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-700 outline-none focus:border-indigo-400">
+                    </label>
+                    <button onclick="searchConcept()"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-xl shadow-lg shadow-indigo-600/30 transition">Find
+                        Prerequisites</button>
+                    <button onclick="openSaveModal()"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-5 rounded-xl shadow-lg shadow-emerald-600/30 transition">Save
+                        Roadmap</button>
+                    <button onclick="exportRoadmap('json')"
+                        class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-5 rounded-xl transition">Export
+                        JSON</button>
+                    <button onclick="exportRoadmap('csv')"
+                        class="bg-slate-700 hover:bg-slate-800 text-white font-bold py-3 px-5 rounded-xl transition">Export
+                        CSV</button>
+                    <button onclick="copyRoadmap()"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-xl">Copy Roadmap</button>
+                </div>
+            </div>
+            <p id="statusMsg" class="mt-3 text-sm font-semibold text-indigo-700"></p>
+            <div id="loadingSpinner" class="hidden flex justify-center mt-4">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+        </section>
+
+        <section class="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-5">
+
+            <div class="xl:col-span-8 min-h-0 flex flex-col gap-4 overflow-y-auto pr-1">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[360px]">
+                    <article class="glass border border-emerald-100 rounded-2xl overflow-hidden relative min-h-[360px]">
+                        <div
+                            class="absolute top-3 left-3 z-10 text-xs font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-lg">
+                            🌱 Foundational Graph</div>
+                        <div id="cy-foundational" class="w-full h-full min-h-[360px]"></div>
+                    </article>
+                    <article class="glass border border-amber-100 rounded-2xl overflow-hidden relative min-h-[360px]">
+                        <div
+                            class="absolute top-3 left-3 z-10 text-xs font-extrabold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-lg">
+                            🚀 Intermediate Graph</div>
+                        <div id="cy-intermediate" class="w-full h-full min-h-[360px]"></div>
+                    </article>
+                    <article class="glass border border-rose-100 rounded-2xl overflow-hidden relative min-h-[360px]">
+                        <div
+                            class="absolute top-3 left-3 z-10 text-xs font-extrabold uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1 rounded-lg">
+                            🧠 Advanced Graph</div>
+                        <div id="cy-advanced" class="w-full h-full min-h-[360px]"></div>
+                    </article>
+                </div>
+
+                <div class="glass border border-indigo-100 rounded-2xl p-4">
+                    <h3 class="font-extrabold text-indigo-700 text-sm uppercase tracking-wider">Node Explorer</h3>
+                    <p id="nodeExplorer" class="mt-2 text-sm text-slate-600">Click a node to inspect concept details
+                        without changing your search query.</p>
+                    <div id="nodeInfoBox"
+                        class="mt-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-500">
+                        Select a node in any graph panel to view concept metadata and direct prerequisite links.
+                    </div>
+                </div>
+            </div>
+
+            <aside
+                class="xl:col-span-4 min-h-0 glass border border-indigo-100 rounded-2xl overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-indigo-100 bg-indigo-50/60">
+                    <h3 class="font-bold text-slate-800">Learning Roadmap</h3>
+                    <p class="text-xs text-slate-500 mt-1">Ordered by prerequisite depth (foundational → advanced).</p>
+                </div>
+                <div id="listContent" class="p-4 overflow-y-auto flex-1">
+                    <p class="text-sm text-slate-400">Run a search to generate your personalized prerequisite sequence.
+                    </p>
+                </div>
+            </aside>
+        </section>
+    </main>
+
+    <!-- Roadmaps Modal -->
+    <div id="roadmapsModal"
+        class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h2 class="font-bold text-slate-800">My Saved Roadmaps</h2>
+                <button onclick="closeRoadmapsModal()" class="text-slate-400 hover:text-slate-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <div id="roadmapsList" class="p-4 overflow-y-auto flex-1">
+                <div class="flex justify-center py-8">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const graphs = {};
+        let currentRoadmap = null;
+
+        document.getElementById("searchInput").addEventListener("keypress", function (event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                searchConcept();
+            }
+        });
+
+        function setStatus(message, isError = false) {
+            const statusNode = document.getElementById('statusMsg');
+            statusNode.innerText = message;
+            statusNode.classList.toggle('text-red-600', isError);
+            statusNode.classList.toggle('text-indigo-700', !isError);
+        }
+
+        function clearRoadmapView(message) {
+            currentRoadmap = null;
+
+            const panelIds = ['cy-foundational', 'cy-intermediate', 'cy-advanced'];
+            panelIds.forEach(id => {
+                const container = document.getElementById(id);
+                const cy = graphs[id];
+                if (cy && typeof cy.destroy === 'function') {
+                    try {
+                        cy.destroy();
+                    } catch (e) { }
+                }
+                graphs[id] = undefined;
+
+                if (container && container.parentNode) {
+                    const replacement = container.cloneNode(false); // keep id and classes, drop children
+                    replacement.innerHTML = '<div class="h-full flex items-center justify-center text-sm text-slate-400">No roadmap to display.</div>';
+                    container.parentNode.replaceChild(replacement, container);
+                }
+            });
+
+            const listDiv = document.getElementById('listContent');
+            if (listDiv) {
+                listDiv.innerHTML = `<p class="text-sm text-slate-400">${message || 'No roadmap available for this query.'}</p>`;
+            }
+
+            const nodeInfoBox = document.getElementById('nodeInfoBox');
+            if (nodeInfoBox) {
+                nodeInfoBox.innerHTML = 'Select a node in any graph panel to view concept metadata and direct prerequisite links.';
+            }
+            const nodeExplorer = document.getElementById('nodeExplorer');
+            if (nodeExplorer) {
+                nodeExplorer.innerText = 'Click a node to inspect concept details without changing your search query.';
+            }
+        }
+
+        async function searchConcept() {
+            const concept = document.getElementById('searchInput').value.trim();
+            const nodeLimit = getNodeLimit();
+            const spinner = document.getElementById('loadingSpinner');
+
+            if (!concept) {
+                setStatus('Enter a concept or content text before searching.', true);
+                if (spinner) spinner.classList.add('hidden');
+                return;
+            }
+
+            setStatus('⏳ Generating roadmap... please wait');
+            if (spinner) spinner.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/get_prerequisites', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ concept: concept, node_limit: nodeLimit })
+                });
+                const data = await response.json();
+
+                if (!data.nodes || data.nodes.length === 0) {
+                    const targetLabel = data.target || concept;
+                    setStatus(`⚠️ No matching concept found for '${targetLabel}'. Try a more specific term.`, true);
+                    clearRoadmapView(`No roadmap found for '${targetLabel}'.`);
+                    return;
+                }
+
+                currentRoadmap = data;
+                setStatus(`✅ Generated roadmap for ${data.target}. Click nodes to recursively explore prerequisites.`);
+                renderGraphs(data.nodes, data.edges);
+                renderList(data.list, data.learning_path, data.target);
+            } catch (e) {
+                setStatus('⚠️ Error generating roadmap. Try again.', true);
+            } finally {
+                if (spinner) spinner.classList.add('hidden');
+            }
+        }
+
+        function showNodeInfo(nodeData) {
+            if (!currentRoadmap || !nodeData) return;
+
+            const incoming = (currentRoadmap.edges || []).filter(e => e.data.target === nodeData.id);
+            const outgoing = (currentRoadmap.edges || []).filter(e => e.data.source === nodeData.id);
+            const idToLabel = {};
+            (currentRoadmap.nodes || []).forEach(n => { idToLabel[n.data.id] = n.data.label; });
+
+            const incomingLabels = incoming.slice(0, 5).map(e => idToLabel[e.data.source]).filter(Boolean);
+            const outgoingLabels = outgoing.slice(0, 5).map(e => idToLabel[e.data.target]).filter(Boolean);
+
+            const box = document.getElementById('nodeInfoBox');
+            box.innerHTML = `
+                <div class="text-slate-800 font-bold">${nodeData.label}</div>
+                <div class="mt-1 text-xs uppercase tracking-wider text-indigo-600 font-semibold">${nodeData.level} • Graph Distance ${nodeData.distance}</div>
+                <div class="mt-3 text-slate-700"><span class="font-semibold">Direct prerequisites:</span> ${incoming.length}</div>
+                <div class="text-slate-700"><span class="font-semibold">Concepts unlocked:</span> ${outgoing.length}</div>
+                <div class="mt-3 text-slate-600"><span class="font-semibold">Top prerequisite nodes:</span> ${incomingLabels.length ? incomingLabels.join(', ') : 'None visible in current roadmap'}</div>
+                <div class="mt-1 text-slate-600"><span class="font-semibold">Top downstream nodes:</span> ${outgoingLabels.length ? outgoingLabels.join(', ') : 'None visible in current roadmap'}</div>
+            `;
+
+            document.getElementById('nodeExplorer').innerText = `Selected: ${nodeData.label}`;
+            setStatus(`ℹ️ Viewing concept details for ${nodeData.label}.`);
+        }
+
+        function renderGraphs(allNodes, allEdges) {
+            const levels = ['Foundational', 'Intermediate', 'Advanced'];
+            const panelNodeCap = getNodeLimit();
+            const bridgeCap = Math.max(3, Math.floor(panelNodeCap / 3));
+            const colorMap = {
+                Foundational: { node: '#10b981', edge: '#6ee7b7', glow: '#ecfdf5' },
+                Intermediate: { node: '#f59e0b', edge: '#fcd34d', glow: '#fffbeb' },
+                Advanced: { node: '#f43f5e', edge: '#fda4af', glow: '#fff1f2' }
+            };
+
+            const bridgeFor = {
+                Foundational: 'Intermediate',
+                Intermediate: 'Advanced',
+                Advanced: null
+            };
+
+            const nodeById = {};
+            allNodes.forEach(n => {
+                nodeById[n.data.id] = n;
+            });
+
+            levels.forEach(level => {
+                const containerId = `cy-${level.toLowerCase()}`;
+                const container = document.getElementById(containerId);
+                const style = colorMap[level];
+
+                const primaryNodes = allNodes
+                    .filter(n => n.data.level === level || (level === 'Advanced' && n.data.is_target))
+                    .sort((a, b) => (a.data.distance ?? 0) - (b.data.distance ?? 0))
+                    .slice(0, panelNodeCap);
+                const primaryIds = new Set(primaryNodes.map(n => n.data.id));
+
+                let levelEdges = allEdges.filter(e => primaryIds.has(e.data.source) && primaryIds.has(e.data.target));
+                let levelNodes = [...primaryNodes];
+
+                if (levelEdges.length === 0 && bridgeFor[level]) {
+                    const bridgeNodes = allNodes
+                        .filter(n => n.data.level === bridgeFor[level])
+                        .sort((a, b) => (a.data.distance ?? 0) - (b.data.distance ?? 0))
+                        .slice(0, bridgeCap);
+                    const bridgeIds = new Set(bridgeNodes.map(n => n.data.id));
+                    const panelIds = new Set([...primaryIds, ...bridgeIds]);
+
+                    levelEdges = allEdges.filter(e => {
+                        if (!panelIds.has(e.data.source) || !panelIds.has(e.data.target)) return false;
+                        return primaryIds.has(e.data.source) || primaryIds.has(e.data.target);
+                    });
+
+                    levelNodes = [
+                        ...primaryNodes.map(n => ({ ...n, data: { ...n.data, is_bridge: false } })),
+                        ...bridgeNodes.map(n => ({ ...n, data: { ...n.data, is_bridge: true } }))
+                    ];
+                } else {
+                    levelNodes = primaryNodes.map(n => ({ ...n, data: { ...n.data, is_bridge: false } }));
+                }
+
+                if (graphs[containerId]) {
+                    graphs[containerId].destroy();
+                }
+
+                if (levelNodes.length === 0) {
+                    container.innerHTML = '<div class="h-full flex items-center justify-center text-sm text-slate-400">No nodes in this phase.</div>';
+                    return;
+                }
+
+                container.innerHTML = '';
+                const cy = cytoscape({
+                    container,
+                    elements: [...levelNodes, ...levelEdges],
+                    wheelSensitivity: 0.25,
+                    style: [
+                        {
+                            selector: 'node',
+                            style: {
+                                'label': 'data(label)',
+                                'width': ele => ele.data('is_target') ? 36 : (ele.data('is_bridge') ? 18 : 24),
+                                'height': ele => ele.data('is_target') ? 36 : (ele.data('is_bridge') ? 18 : 24),
+                                'background-color': style.node,
+                                'border-width': ele => ele.data('is_target') ? 5 : 2,
+                                'border-color': '#ffffff',
+                                'text-valign': 'bottom',
+                                'text-halign': 'center',
+                                'text-margin-y': 8,
+                                'font-size': 11,
+                                'font-weight': 700,
+                                'text-wrap': 'wrap',
+                                'text-max-width': 110,
+                                'color': '#0f172a',
+                                'overlay-opacity': 0,
+                                'shadow-blur': 16,
+                                'shadow-color': style.glow,
+                                'shadow-opacity': 1,
+                                'shadow-offset-x': 0,
+                                'shadow-offset-y': 0,
+                                'opacity': ele => ele.data('is_bridge') ? 0.55 : 1
+                            }
+                        },
+                        {
+                            selector: 'edge',
+                            style: {
+                                'width': 2,
+                                'line-color': style.edge,
+                                'target-arrow-color': style.edge,
+                                'target-arrow-shape': 'triangle',
+                                'curve-style': 'bezier',
+                                'arrow-scale': 1
+                            }
+                        },
+                        {
+                            selector: 'node[is_bridge = 1]',
+                            style: {
+                                'font-size': 9,
+                                'text-opacity': 0.6
+                            }
+                        },
+                        {
+                            selector: 'node:selected',
+                            style: {
+                                'border-color': '#1d4ed8',
+                                'border-width': 5
+                            }
+                        }
+                    ],
+                    layout: {
+                        name: 'breadthfirst',
+                        directed: true,
+                        padding: 28,
+                        animate: true,
+                        spacingFactor: 1.25,
+                        avoidOverlap: true,
+                        fit: true
+                    }
+                });
+
+                cy.on('tap', 'node', evt => {
+                    const node = evt.target;
+                    showNodeInfo(node.data());
+                });
+
+                graphs[containerId] = cy;
+            });
+        }
+
+        function getNodeLimit() {
+            const value = Number(document.getElementById('nodeLimitInput')?.value || 14);
+            return Math.min(40, Math.max(4, Number.isFinite(value) ? value : 14));
+        }
+
+        function renderList(levels, learningPath, target) {
+            const div = document.getElementById('listContent');
+            const section = (title, emoji, items, styles) => {
+                const rows = items.length
+                    ? items.map(i => `<li class="${styles.bg} ${styles.text} ${styles.border} border rounded-lg px-3 py-2 text-sm font-semibold">${i}</li>`).join('')
+                    : '<li class="text-slate-400 italic text-sm">No concepts.</li>';
+
+                return `
+                    <div class="mb-5">
+                        <h4 class="text-xs uppercase tracking-wider font-extrabold ${styles.head} mb-2">${emoji} ${title}</h4>
+                        <ul class="space-y-2">${rows}</ul>
+                    </div>
+                `;
+            };
+
+            const steps = (learningPath || []).slice(0, 20).map(item => `
+                <li class="flex items-start gap-2 text-sm text-slate-700">
+                    <span class="mt-1 text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5">${item.step}</span>
+                    <span>${item.concept} <span class="text-slate-400">(${item.level})</span></span>
+                </li>
+            `).join('');
+
+            div.innerHTML = `
+                <p class="text-xs text-slate-500 mb-4">Target: <span class="font-bold text-indigo-700">${target}</span></p>
+                ${section('Foundational', '🌱', levels.Foundational || [], { bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-100', head: 'text-emerald-700' })}
+                ${section('Intermediate', '🚀', levels.Intermediate || [], { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-100', head: 'text-amber-700' })}
+                ${section('Advanced', '🧠', levels.Advanced || [], { bg: 'bg-rose-50', text: 'text-rose-800', border: 'border-rose-100', head: 'text-rose-700' })}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs uppercase tracking-wider font-extrabold text-indigo-700 mb-2">🧭 Recommended Learning Sequence</h4>
+                    <ol class="space-y-2">${steps || '<li class="text-slate-400 text-sm italic">No sequence available.</li>'}</ol>
+                </div>
+            `;
+        }
+
+        async function confirmSaveRoadmap() {
+
+            const filename = document.getElementById("roadmapNameInput").value.trim();
+
+            if (!filename) {
+                showAlert("⚠️ Roadmap name cannot be empty.");
+                return;
+            }
+
+            if (!currentRoadmap) {
+                showAlert("⚠️ Generate a roadmap first.");
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/save_roadmap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        roadmap_name: filename,
+                        target: currentRoadmap.target,
+                        input_text: currentRoadmap.input_text || document.getElementById('searchInput').value.trim(),
+                        roadmap: currentRoadmap
+                    })
+                });
+
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    // If the server returns no/invalid JSON, still treat a 2xx as success.
+                }
+
+                if (!response.ok) {
+                    showAlert("❌ Failed to save roadmap.");
+                    return;
+                }
+
+                document.getElementById("roadmapNameInput").value = "";
+                closeSaveModal();
+                showToast("Roadmap saved successfully!");
+            } catch (err) {
+                showAlert("⚠️ Server error. Try again.");
+            }
+        }
+
+        function exportRoadmap(format) {
+            if (!currentRoadmap) {
+                setStatus('Generate a roadmap first, then export.', true);
+                return;
+            }
+
+            if (format === 'json') {
+                const blob = new Blob([JSON.stringify(currentRoadmap, null, 2)], { type: 'application/json' });
+                downloadBlob(blob, `${sanitizeFileName(currentRoadmap.target)}-roadmap.json`);
+                setStatus('⬇️ Exported roadmap JSON.');
+                return;
+            }
+
+            const rows = [['step', 'concept', 'level', 'distance']];
+            (currentRoadmap.learning_path || []).forEach(item => {
+                rows.push([item.step, item.concept, item.level, item.distance]);
+            });
+            const csv = rows.map(r => r.map(v => `"${String(v).replaceAll('"', '""')}"`).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            downloadBlob(blob, `${sanitizeFileName(currentRoadmap.target)}-roadmap.csv`);
+            setStatus('⬇️ Exported roadmap CSV.');
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = filename;
+            anchor.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function sanitizeFileName(name) {
+            return (name || 'conceptpath').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        }
+
+        function copyRoadmap() {
+            if (!currentRoadmap || !currentRoadmap.learning_path || !currentRoadmap.learning_path.length) {
+                setStatus('Generate roadmap first', true);
+                return;
+            }
+
+            const text = currentRoadmap.learning_path
+                .map(s => `${s.step}. ${s.concept}`)
+                .join("\n");
+
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    showToast("Roadmap copied to clipboard!");
+                })
+                .catch(() => {
+                    showAlert("⚠️ Unable to copy roadmap to clipboard.");
+                });
+        }
+
+        async function openRoadmapsModal() {
+            document.getElementById('roadmapsModal').classList.remove('hidden');
+            const listDiv = document.getElementById('roadmapsList');
+            listDiv.innerHTML = '<div class="flex justify-center py-8"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>';
+
+            try {
+                const response = await fetch('/api/my_roadmaps');
+                if (!response.ok) throw new Error('Failed to fetch');
+                const data = await response.json();
+
+                if (!data.items || data.items.length === 0) {
+                    listDiv.innerHTML = '<p class="text-slate-500 text-center py-4">No saved roadmaps yet.</p>';
+                    return;
+                }
+
+                listDiv.innerHTML = '<ul class="space-y-2">' + data.items.map(item => `
+                    <li class="flex items-center justify-between gap-2">
+                        <button onclick="loadRoadmap(${item.id})" class="flex-1 text-left p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition flex justify-between items-center group">
+                            <div>
+                                <div class="font-bold text-slate-700 group-hover:text-indigo-700">${item.name}</div>
+                                <div class="text-sm text-slate-500">${item.target}</div>
+                                <div class="text-xs text-slate-400 mt-1">${new Date(item.created_at).toLocaleString()}</div>
+                            </div>
+                            <svg class="w-5 h-5 text-slate-300 group-hover:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </button>
+                        <button onclick="deleteRoadmap(${item.id})" class="p-2 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 7h12M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m1 0v11a2 2 0 01-2 2H8a2 2 0 01-2-2V7h12z"></path>
+                            </svg>
+                        </button>
+                    </li>
+                `).join('') + '</ul>';
+            } catch (e) {
+                listDiv.innerHTML = '<p class="text-red-500 text-center py-4">Error loading roadmaps.</p>';
+            }
+        }
+
+        function closeRoadmapsModal() {
+            document.getElementById('roadmapsModal').classList.add('hidden');
+        }
+
+        async function loadRoadmap(id) {
+            closeRoadmapsModal();
+            setStatus('⏳ Loading saved roadmap...');
+
+            try {
+                const response = await fetch('/api/get_roadmap/' + id);
+                if (!response.ok) throw new Error('Failed to fetch roadmap');
+                const data = await response.json();
+
+                currentRoadmap = data;
+                document.getElementById('searchInput').value = data.input_text || data.target;
+                renderGraphs(data.nodes, data.edges);
+                renderList(data.list, data.learning_path, data.target);
+                setStatus('✅ Loaded saved roadmap for ' + data.target + '.');
+            } catch (e) {
+                setStatus('⚠️ Error loading saved roadmap.', true);
+            }
+        }
+
+        async function deleteRoadmap(id) {
+            try {
+                const response = await fetch('/api/delete_roadmap/' + id, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!response.ok) {
+                    showAlert('❌ Failed to delete roadmap.');
+                    return;
+                }
+
+                // Refresh the list while keeping the modal open
+                openRoadmapsModal();
+                showToast('Roadmap deleted.');
+            } catch (e) {
+                showAlert('⚠️ Error deleting roadmap. Try again.');
+            }
+        }
+        function showAlert(message) {
+            const box = document.getElementById("alertBox");
+            box.innerText = message;
+            box.classList.remove("hidden");
+
+            setTimeout(() => {
+                box.classList.add("hidden");
+            }, 3000);
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById("toast");
+            toast.innerText = msg;
+            toast.classList.remove("hidden");
+
+            setTimeout(() => {
+                toast.classList.add("hidden");
+            }, 3000);
+        }
+        function openSaveModal() {
+
+            const input = document.getElementById("roadmapNameInput");
+            input.value = "";
+
+            document.getElementById("saveModal").classList.remove("hidden");
+
+            setTimeout(() => {
+                input.focus();
+            }, 100);
+        }
+
+        function closeSaveModal() {
+            document.getElementById("saveModal").classList.add("hidden");
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle("dark");
+        }
+    </script>
+    <div id="alertBox"
+        class="fixed top-6 right-6 hidden bg-red-100 border border-red-300 text-red-700 px-4 py-3 rounded-xl shadow-lg">
+    </div>
+    <div id="toast"
+        class="fixed top-6 right-6 hidden bg-green-100 border border-green-300 text-green-700 px-4 py-3 rounded-xl shadow-lg">
+    </div>
+    <div id="saveModal" class="fixed inset-0 bg-black/40 hidden flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-xl shadow-xl w-96">
+            <h3 class="font-bold text-lg mb-3">Save Roadmap</h3>
+
+            <input id="roadmapNameInput" type="text" placeholder="Enter roadmap name"
+                class="w-full border rounded-lg px-3 py-2 mb-4">
+
+            <div class="flex justify-end gap-2">
+                <button onclick="closeSaveModal()" class="px-4 py-2 text-gray-500">
+                    Cancel
+                </button>
+
+                <button onclick="confirmSaveRoadmap()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg">
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
